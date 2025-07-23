@@ -87,5 +87,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Created as a student project for learning WebSockets and Python GUI development
-- Inspired by various remote control applications
+- Created entirely by Krishna Tripathi as a personal project for learning WebSockets and Python GUI development
+- Developed from scratch with no external assistance
+- Inspired by my interest in remote control applications
