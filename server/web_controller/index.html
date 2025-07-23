@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTRLit Web Controller</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #2c3e50;
+            color: white;
+            touch-action: none;
+        }
+        .container {
+            max-width: 100%;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            padding: 10px;
+            background-color: #34495e;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .status-indicator {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background-color: red;
+        }
+        .status-indicator.connected {
+            background-color: green;
+        }
+        .touchpad {
+            width: 100%;
+            height: 300px;
+            background-color: #34495e;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .touchpad::after {
+            content: '';
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: rgba(52, 152, 219, 0.5);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .touchpad.active::after {
+            opacity: 1;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .btn {
+            background-color: #3498db;
+            border: none;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 30%;
+            text-align: center;
+        }
+        .keyboard {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-top: 20px;
+        }
+        .key {
+            background-color: #34495e;
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .sensor-data {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: #bdc3c7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CTRLit Remote</h1>
+            <div id="status-indicator" class="status-indicator"></div>
+            <a href="help.html" style="position: absolute; right: 50px; top: 50%; transform: translateY(-50%); color: white; font-size: 20px;">?</a>
+            <button id="debug-toggle" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); background: none; border: 1px solid white; color: white; padding: 2px 5px; font-size: 10px;">DEBUG</button>
+        </div>
+
+        <div class="sensor-data">
+            <div>X: <span id="x-value">0.00</span></div>
+            <div>Y: <span id="y-value">0.00</span></div>
+            <div>Z: <span id="z-value">0.00</span></div>
+            <div id="debug-info" style="margin-top: 5px; font-weight: bold;"></div>
+            <div id="connection-status" style="margin-top: 5px; font-weight: bold; color: #e74c3c;">Connecting...</div>
+        </div>
+        
+        <div style="margin-bottom: 10px; text-align: center;">
+            <label for="sensitivity" style="display: block; margin-bottom: 5px;">Sensitivity: <span id="sensitivity-value">8</span></label>
+            <input type="range" id="sensitivity" min="1" max="15" value="8" style="width: 80%;">
+        </div>
+
+        <div id="touchpad" class="touchpad">
+            <p>Touchpad Area</p>
+            <p style="font-size: 12px; color: #bdc3c7;">Drag here to move mouse</p>
+            <div id="touch-indicator" style="position: absolute; width: 20px; height: 20px; border-radius: 50%; background-color: rgba(52, 152, 219, 0.7); pointer-events: none; display: none;"></div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="left-click">Left Click</button>
+            <button class="btn" id="right-click">Right Click</button>
+            <button class="btn" id="keyboard-toggle">Keyboard</button>
+        </div>
+
+        <div id="keyboard" class="keyboard" style="display: none;">
+            <!-- Keyboard keys will be added by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Connection variables
+        let socket;
+        let isConnected = false;
+        let serverUrl;
+        let accessCode;
+        let debugMode = true; // Enable debug mode
+        let sensitivity = 8; // Default sensitivity
+
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const server = urlParams.get('server');
+        const port = urlParams.get('port');
+        const code = urlParams.get('code');
+
+        if (server && port && code) {
+            serverUrl = `ws://${server}:${port}`;
+            accessCode = code;
+            connectToServer();
+        } else {
+            alert("Missing connection parameters. Please scan a valid QR code.");
+        }
+
+        // Connect to WebSocket server
+        function connectToServer() {
+            try {
+                socket = new WebSocket(serverUrl);
+
+                socket.onopen = function() {
+                    console.log("WebSocket connection established");
+                    
+                    // Send authentication
+                    socket.send(JSON.stringify({
+                        type: 'auth',
+                        code: accessCode
+                    }));
+                };
+
+                socket.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    console.log("Received:", data);
+                    
+                    if (data.type === 'auth_response') {
+                        if (data.status === 'success') {
+                            isConnected = true;
+                            document.getElementById('status-indicator').classList.add('connected');
+                            document.getElementById('connection-status').textContent = 'Connected to desktop';
+                            document.getElementById('connection-status').style.color = '#2ecc71';
+                        } else {
+                            document.getElementById('connection-status').textContent = `Authentication failed: ${data.message}`;
+                            alert(`Authentication failed: ${data.message}`);
+                        }
+                    } else if (data.type === 'error') {
+                        document.getElementById('connection-status').textContent = data.message;
+                        document.getElementById('connection-status').style.color = '#e74c3c';
+                    }
+                };
+
+                socket.onclose = function() {
+                    console.log("WebSocket connection closed");
+                    isConnected = false;
+                    document.getElementById('status-indicator').classList.remove('connected');
+                    alert("Connection closed. Please refresh to reconnect.");
+                };
+
+                socket.onerror = function(error) {
+                    console.error("WebSocket error:", error);
+                    alert("Connection error. Please try again.");
+                };
+            } catch (e) {
+                console.error("Connection error:", e);
+                alert(`Connection error: ${e.message}`);
+            }
+        }
+
+        // Send message to server
+        function sendMessage(message) {
+            if (isConnected && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(message));
+                if (debugMode) {
+                    console.log('Sent message:', message);
+                }
+            }
+        }
+
+        // Touchpad functionality - works with both touch and mouse
+        const touchpad = document.getElementById('touchpad');
+        let lastX = 0;
+        let lastY = 0;
+        let isPointerDown = false;
+
+        // Touch indicator
+        const touchIndicator = document.getElementById('touch-indicator');
+        
+        function updateTouchIndicator(x, y) {
+            touchIndicator.style.display = 'block';
+            touchIndicator.style.left = x + 'px';
+            touchIndicator.style.top = y + 'px';
+        }
+        
+        // Touch events
+        touchpad.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+            
+            // Get position relative to touchpad
+            const rect = touchpad.getBoundingClientRect();
+            updateTouchIndicator(touch.clientX - rect.left, touch.clientY - rect.top);
+        });
+
+        touchpad.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const dx = touch.clientX - lastX;
+            const dy = touch.clientY - lastY;
+            
+            // Update indicator position
+            const rect = touchpad.getBoundingClientRect();
+            updateTouchIndicator(touch.clientX - rect.left, touch.clientY - rect.top);
+            
+            if (isConnected) {
+                // Multiply by a sensitivity factor to make movement more noticeable
+                // Use a higher base value for better responsiveness
+                const scaledDx = dx * sensitivity * 2;
+                const scaledDy = dy * sensitivity * 2;
+                
+                sendMessage({
+                    type: 'touchpad',
+                    dx: scaledDx,
+                    dy: scaledDy
+                });
+                
+                // Update debug info
+                if (debugMode) {
+                    document.getElementById('debug-info').textContent = 
+                        `Move: ${scaledDx.toFixed(1)}, ${scaledDy.toFixed(1)}`;
+                }
+            }
+            
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+        });
+        
+        touchpad.addEventListener('touchend', function(e) {
+            touchIndicator.style.display = 'none';
+        });
+        
+        touchpad.addEventListener('touchcancel', function(e) {
+            touchIndicator.style.display = 'none';
+        });
+        
+        // Mouse events (for desktop browsers)
+        touchpad.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isPointerDown = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            
+            // Get position relative to touchpad
+            const rect = touchpad.getBoundingClientRect();
+            updateTouchIndicator(e.clientX - rect.left, e.clientY - rect.top);
+        });
+        
+        touchpad.addEventListener('mousemove', function(e) {
+            if (!isPointerDown) return;
+            e.preventDefault();
+            
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            
+            // Update indicator position
+            const rect = touchpad.getBoundingClientRect();
+            updateTouchIndicator(e.clientX - rect.left, e.clientY - rect.top);
+            
+            if (isConnected) {
+                sendMessage({
+                    type: 'touchpad',
+                    dx: dx,
+                    dy: dy
+                });
+            }
+            
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+        
+        touchpad.addEventListener('mouseup', function(e) {
+            isPointerDown = false;
+            touchIndicator.style.display = 'none';
+        });
+        
+        touchpad.addEventListener('mouseleave', function(e) {
+            isPointerDown = false;
+            touchIndicator.style.display = 'none';
+        });
+
+        // Mouse buttons
+        document.getElementById('left-click').addEventListener('click', function() {
+            sendMessage({
+                type: 'mouse',
+                action: 'left_click'
+            });
+        });
+
+        document.getElementById('right-click').addEventListener('click', function() {
+            sendMessage({
+                type: 'mouse',
+                action: 'right_click'
+            });
+        });
+
+        // Keyboard toggle
+        document.getElementById('keyboard-toggle').addEventListener('click', function() {
+            const keyboard = document.getElementById('keyboard');
+            if (keyboard.style.display === 'none') {
+                keyboard.style.display = 'grid';
+            } else {
+                keyboard.style.display = 'none';
+            }
+        });
+
+        // Create keyboard
+        const keyboard = document.getElementById('keyboard');
+        const keys = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+            'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+            'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+            'SPACE', 'ENTER', 'BACKSPACE', 'ESC'
+        ];
+
+        keys.forEach(key => {
+            const button = document.createElement('button');
+            button.className = 'key';
+            button.textContent = key;
+            button.addEventListener('click', function() {
+                sendMessage({
+                    type: 'keyboard',
+                    key: key
+                });
+            });
+            keyboard.appendChild(button);
+        });
+
+        // Sensitivity slider
+        document.getElementById('sensitivity').addEventListener('input', function() {
+            sensitivity = parseInt(this.value);
+            document.getElementById('sensitivity-value').textContent = sensitivity;
+        });
+        
+        // Debug toggle
+        document.getElementById('debug-toggle').addEventListener('click', function() {
+            debugMode = !debugMode;
+            this.style.background = debugMode ? '#3498db' : 'none';
+            document.getElementById('debug-info').style.display = debugMode ? 'block' : 'none';
+        });
+        
+        // Try to use device motion sensors if available
+        try {
+            if (window.DeviceMotionEvent) {
+                // Request permission for iOS 13+ devices
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    document.body.addEventListener('click', function() {
+                        DeviceMotionEvent.requestPermission()
+                            .then(function(state) {
+                                if (state === 'granted') {
+                                    enableMotionSensors();
+                                }
+                            })
+                            .catch(console.error);
+                    }, {once: true});
+                } else {
+                    // For non-iOS devices
+                    enableMotionSensors();
+                }
+            }
+        } catch (e) {
+            console.log('Motion sensors not available:', e);
+        }
+        
+        function enableMotionSensors() {
+            window.addEventListener('devicemotion', function(event) {
+                const x = event.accelerationIncludingGravity?.x || 0;
+                const y = event.accelerationIncludingGravity?.y || 0;
+                const z = event.accelerationIncludingGravity?.z || 0;
+                
+                document.getElementById('x-value').textContent = x.toFixed(2);
+                document.getElementById('y-value').textContent = y.toFixed(2);
+                document.getElementById('z-value').textContent = z.toFixed(2);
+                
+                if (isConnected) {
+                    sendMessage({
+                        type: 'sensor',
+                        x: x,
+                        y: y,
+                        z: z
+                    });
+                }
+            }, true);
+        }
+    </script>
+</body>
+</html>

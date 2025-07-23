@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CTRLit Direct Access</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c3e50;
+            color: white;
+        }
+        h1 {
+            text-align: center;
+            color: #3498db;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            border: none;
+            color: white;
+            padding: 15px;
+            width: 100%;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .info {
+            background-color: #34495e;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CTRLit Direct Access</h1>
+        
+        <div class="form-group">
+            <label for="server">Server IP:</label>
+            <input type="text" id="server" placeholder="e.g., 192.168.1.100">
+        </div>
+        
+        <div class="form-group">
+            <label for="port">Server Port:</label>
+            <input type="text" id="port" placeholder="e.g., 8080" value="8080">
+        </div>
+        
+        <div class="form-group">
+            <label for="code">Access Code:</label>
+            <input type="text" id="code" placeholder="e.g., ABC123">
+        </div>
+        
+        <button onclick="connect()">Connect</button>
+        
+        <div class="info">
+            <p>Enter the server IP, port, and access code shown on your desktop app.</p>
+            <p>If you're having trouble connecting, make sure your phone and computer are on the same network.</p>
+        </div>
+    </div>
+
+    <script>
+        function connect() {
+            const server = document.getElementById('server').value;
+            const port = document.getElementById('port').value;
+            const code = document.getElementById('code').value;
+            
+            if (!server || !port || !code) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            // Redirect to the controller page with the provided parameters
+            window.location.href = `index.html?server=${server}&port=${port}&code=${code}`;
+        }
+        
+        // Check if there are URL parameters to pre-fill the form
+        const urlParams = new URLSearchParams(window.location.search);
+        const server = urlParams.get('server');
+        const port = urlParams.get('port');
+        const code = urlParams.get('code');
+        
+        if (server) document.getElementById('server').value = server;
+        if (port) document.getElementById('port').value = port;
+        if (code) document.getElementById('code').value = code;
+    </script>
+</body>
+</html>
